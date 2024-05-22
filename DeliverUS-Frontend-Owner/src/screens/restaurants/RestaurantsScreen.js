@@ -2,7 +2,7 @@
 import React, { useContext, useEffect, useState } from 'react'
 import { StyleSheet, FlatList, Pressable, View } from 'react-native'
 
-import { getAll, remove } from '../../api/RestaurantEndpoints'
+import { getAll, remove, patchStatus } from '../../api/RestaurantEndpoints'
 import ImageCard from '../../components/ImageCard'
 import TextSemiBold from '../../components/TextSemibold'
 import TextRegular from '../../components/TextRegular'
@@ -12,10 +12,13 @@ import { AuthorizationContext } from '../../context/AuthorizationContext'
 import { showMessage } from 'react-native-flash-message'
 import DeleteModal from '../../components/DeleteModal'
 import restaurantLogo from '../../../assets/restaurantLogo.jpeg'
+import ConfirmationModal from '../../components/ConfirmationModal'
 
 export default function RestaurantsScreen ({ navigation, route }) {
   const [restaurants, setRestaurants] = useState([])
   const [restaurantToBeDeleted, setRestaurantToBeDeleted] = useState(null)
+  const [restaurantToChangeStatus, setRestaurantToChangeStatus] = useState(null)
+
   const { loggedInUser } = useContext(AuthorizationContext)
 
   useEffect(() => {
@@ -39,6 +42,8 @@ export default function RestaurantsScreen ({ navigation, route }) {
         {item.averageServiceMinutes !== null &&
           <TextSemiBold>Avg. service time: <TextSemiBold textStyle={{ color: GlobalStyles.brandPrimary }}>{item.averageServiceMinutes} min.</TextSemiBold></TextSemiBold>
         }
+                <TextSemiBold>This restaurant is: <TextSemiBold textStyle={{ color: GlobalStyles.brandPrimary }}>{item.status}</TextSemiBold></TextSemiBold>
+
         <TextSemiBold>Shipping: <TextSemiBold textStyle={{ color: GlobalStyles.brandPrimary }}>{item.shippingCosts.toFixed(2)}€</TextSemiBold></TextSemiBold>
         <View style={styles.actionButtonsContainer}>
           <Pressable
@@ -77,6 +82,27 @@ export default function RestaurantsScreen ({ navigation, route }) {
             </TextRegular>
           </View>
         </Pressable>
+
+        {(item.status === 'online' || item.status === 'offline') &&
+        <Pressable
+            onPress={() => { setRestaurantToChangeStatus(item) }}
+            style={({ pressed }) => [
+              {
+                backgroundColor: pressed
+                  ? GlobalStyles.brandSuccessTap
+                  : GlobalStyles.brandSuccess
+              },
+              styles.actionButton
+            ]}>
+          <View style={[{ flex: 1, flexDirection: 'row', justifyContent: 'center' }]}>
+            <MaterialCommunityIcons name='check' color={'white'} size={20}/>
+            <TextRegular textStyle={styles.text}>
+              {item.status}
+            </TextRegular>
+          </View>
+        </Pressable>
+        }
+
         </View>
       </ImageCard>
     )
@@ -153,6 +179,28 @@ export default function RestaurantsScreen ({ navigation, route }) {
     }
   }
 
+  const changeStatus = async (restaurant) => {
+    try {
+      await patchStatus(restaurant.id)
+      await fetchRestaurants()
+      setRestaurantToChangeStatus(null)
+      showMessage({
+        message: `Restaurant ${restaurant.name} succesfully changed`,
+        type: 'success',
+        style: GlobalStyles.flashStyle,
+        titleStyle: GlobalStyles.flashTextStyle
+      })
+    } catch (error) {
+      console.log(error)
+      showMessage({
+        message: `Restaurant ${restaurant.name} could not be changed.`,
+        type: 'error',
+        style: GlobalStyles.flashStyle,
+        titleStyle: GlobalStyles.flashTextStyle
+      })
+    }
+  }
+
   return (
     <>
     <FlatList
@@ -170,6 +218,12 @@ export default function RestaurantsScreen ({ navigation, route }) {
         <TextRegular>The products of this restaurant will be deleted as well</TextRegular>
         <TextRegular>If the restaurant has orders, it cannot be deleted.</TextRegular>
     </DeleteModal>
+    <ConfirmationModal
+      isVisible={restaurantToChangeStatus !== null}
+      onCancel={() => setRestaurantToChangeStatus(null)}
+      onConfirm={() => changeStatus(restaurantToChangeStatus)}>
+        <TextRegular>Other promoted restaurant, if any, will be unpromoted</TextRegular>
+    </ConfirmationModal>
     </>
   )
 }
@@ -201,7 +255,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     bottom: 5,
     position: 'absolute',
-    width: '90%'
+    width: '60%'
   },
   text: {
     fontSize: 16,
